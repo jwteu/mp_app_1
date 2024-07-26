@@ -1,8 +1,11 @@
-import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
 
 void main() {
   runApp(MyApp());
@@ -19,8 +22,9 @@ class MyApp extends StatelessWidget {
       home: LoginPage(),
       routes: {
         '/register': (context) => RegisterPage(),
-        '/main': (context) => MainPage(), // Update this line
+        '/main': (context) => MainPage(),
         '/login': (context) => LoginPage(),
+        '/feedback': (context) => UserFeedbackPage(), // Add this line
       },
     );
   }
@@ -155,7 +159,257 @@ class MainPage extends StatelessWidget {
               },
               child: Text('Go to Weather Page'),
             ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => UserProfilePage()),
+                );
+              },
+              child: Text('Go to User Profile Page'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => UserFeedbackPage()),
+                );
+              },
+              child: Text('Go to User Feedback Page'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => CourseSchedulePage()),
+                );
+              },
+              child: Text('Go to Course Schedule Page'),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class UserProfilePage extends StatefulWidget {
+  @override
+  _UserProfilePageState createState() => _UserProfilePageState();
+}
+
+class _UserProfilePageState extends State<UserProfilePage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _studentIdController = TextEditingController();
+  final _phoneNumberController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _securityAnswerController = TextEditingController();
+  String? _sessionToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionToken();
+  }
+
+Future<void> _loadSessionToken() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  setState(() {
+    _sessionToken = prefs.getString('session_token');
+  });
+  _fetchUserData();
+}
+
+Future<void> _fetchUserData() async {
+  if (_sessionToken == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Session token not found')),
+    );
+    return;
+  }
+  try {
+    final response = await http.post(
+      Uri.parse('http://127.0.0.1/edu_app_server/user_profile.php'),
+      body: {'email': _sessionToken},
+    );
+    if (response.statusCode == 200) {
+      try {
+        final responseData = json.decode(response.body);
+        if (responseData['status'] == 'success') {
+          final data = responseData['data'];
+          setState(() {
+            _nameController.text = data['name'];
+            _emailController.text = data['email'];
+            _studentIdController.text = data['student_id'];
+            _phoneNumberController.text = data['phone_number'];
+            _addressController.text = data['address'];
+            _securityAnswerController.text = data['security_answer'];
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('User not found')),
+          );
+        }
+      } catch (e) {
+        print('Error parsing JSON: $e');
+        print('Response body: ${response.body}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid response format')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load user data: ${response.statusCode}')),
+      );
+    }
+  } catch (e) {
+    print('Error fetching user data: $e'); // Log the error
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: $e')),
+    );
+  }
+}
+
+Future<void> _updateUserData() async {
+  if (_formKey.currentState!.validate()) {
+    if (_sessionToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Session token not found')),
+      );
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1/edu_app_server/update_user.php'),
+        body: {
+          'email': _sessionToken,
+          'name': _nameController.text,
+          'student_id': _studentIdController.text,
+          'phone_number': _phoneNumberController.text,
+          'address': _addressController.text,
+          'security_answer': _securityAnswerController.text,
+        },
+      );
+      
+      print('Full response: ${response.body}');  // Add this line
+      
+      if (response.statusCode == 200) {
+        try {
+          final responseData = json.decode(response.body);
+          if (responseData['status'] == 'success') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('User data updated successfully')),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Update failed: ${responseData['message']}')),
+            );
+          }
+        } catch (e) {
+          print('Error parsing JSON: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid server response')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Server error: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      print('Error updating user data: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+}
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('User Profile Page'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: <Widget>[
+              TextFormField(
+                controller: _nameController,
+                decoration: InputDecoration(labelText: 'Name'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your name';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: _emailController,
+                decoration: InputDecoration(labelText: 'Email'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: _studentIdController,
+                decoration: InputDecoration(labelText: 'Student ID'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your student ID';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: _phoneNumberController,
+                decoration: InputDecoration(labelText: 'Phone Number'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your phone number';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: _addressController,
+                decoration: InputDecoration(labelText: 'Address'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your address';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: _securityAnswerController,
+                decoration: InputDecoration(labelText: 'Security Answer'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your security answer';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _updateUserData,
+                child: Text('Save Changes'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -394,6 +648,275 @@ class RegisterPage extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class UserFeedbackPage extends StatefulWidget {
+  @override
+  _UserFeedbackPageState createState() => _UserFeedbackPageState();
+}
+
+class _UserFeedbackPageState extends State<UserFeedbackPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _feedbackController = TextEditingController();
+  File? _image;
+  String? _sessionToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionToken();
+  }
+
+  Future<void> _loadSessionToken() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _sessionToken = prefs.getString('session_token');
+    });
+  }
+
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+    setState(() {
+      if (pickedFile != null) {
+        _image = File(pickedFile.path);
+      }
+    });
+  }
+
+  Future<void> _submitFeedback() async {
+  if (_formKey.currentState!.validate()) {
+    if (_sessionToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Session token (email) not found')),
+      );
+      return;
+    }
+
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://127.0.0.1/edu_app_server/user_feedback.php'),
+      );
+      request.fields['email'] = _sessionToken!;
+      request.fields['feedback'] = _feedbackController.text;
+      if (_image != null) {
+        request.files.add(await http.MultipartFile.fromPath('photo', _image!.path));
+      }
+
+      var response = await request.send();
+      if (response.statusCode == 200) {
+        var responseData = await response.stream.bytesToString();
+        var jsonResponse = json.decode(responseData);
+        if (jsonResponse['status'] == 'success') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Feedback submitted successfully')),
+          );
+          _feedbackController.clear();
+          setState(() {
+            _image = null;
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Submission failed: ${jsonResponse['message']}')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Server error: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      print('Error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('An error occurred: $e')),
+      );
+    }
+  }
+}
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('User Feedback Page'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: <Widget>[
+              TextFormField(
+                controller: _feedbackController,
+                decoration: InputDecoration(labelText: 'Feedback'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your feedback';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 20),
+              _image == null
+                  ? Text('No image selected.')
+                  : Image.file(_image!),
+              ElevatedButton(
+                onPressed: _pickImage,
+                child: Text('Pick Image'),
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _submitFeedback,
+                child: Text('Submit Feedback'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CourseSchedulePage extends StatefulWidget {
+  @override
+  _CourseSchedulePageState createState() => _CourseSchedulePageState();
+}
+
+class _CourseSchedulePageState extends State<CourseSchedulePage> {
+  List<dynamic> _courseSchedule = [];
+  final _courseController = TextEditingController();
+  String? _sessionToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionToken();
+  }
+
+  Future<void> _loadSessionToken() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _sessionToken = prefs.getString('session_token');
+    });
+    _fetchCourseSchedule();
+  }
+
+  Future<void> _fetchCourseSchedule() async {
+    if (_sessionToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Session token not found')),
+      );
+      return;
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1/edu_app_server/course_schedule.php'),
+        body: {'session_token': _sessionToken},
+      );
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        if (responseData['status'] == 'success') {
+          setState(() {
+            _courseSchedule = responseData['data'];
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load course schedule')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Server error: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      print('Error fetching course schedule: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  Future<void> _addCourse() async {
+    if (_sessionToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Session token not found')),
+      );
+      return;
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1/edu_app_server/add_courses.php'),
+        body: {
+          'session_token': _sessionToken,
+          'course': _courseController.text,
+        },
+      );
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        if (responseData['status'] == 'success') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Course added successfully')),
+          );
+          _fetchCourseSchedule(); // Refresh the course schedule
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to add course')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Server error: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      print('Error adding course: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Course Schedule Page'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                itemCount: _courseSchedule.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    title: Text(_courseSchedule[index]['course_name']),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Code: ${_courseSchedule[index]['course_code']}'),
+                        Text('Instructor: ${_courseSchedule[index]['instructor']}'),
+                        Text('Schedule: ${_courseSchedule[index]['schedule']}'),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            TextField(
+              controller: _courseController,
+              decoration: InputDecoration(labelText: 'Add Course'),
+            ),
+            ElevatedButton(
+              onPressed: _addCourse,
+              child: Text('Add Course'),
+            ),
+          ],
         ),
       ),
     );
